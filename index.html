@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>AI RUN : 바이러스 러너</title>
+    <meta name="description" content="사이버 세계를 달리는 캐주얼 러닝 게임 — 삐야와 오르와 함께!" />
+    <!-- Safari file:// 에서도 동작하도록 시스템 폰트 우선 사용 -->
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- ① START 화면 -->
+      <section id="screen-start" class="screen active">
+        <div class="screen-inner">
+          <p class="eyebrow">바이브 코딩 실습</p>
+          <h1 class="title-main">AI RUN</h1>
+          <p class="subtitle">바이러스 러너</p>
+          <p class="desc">
+            바이러스가 가득한<br />
+            사이버 세계를 달려라!
+          </p>
+          <div class="best-record" id="start-best">
+            BEST — <span id="start-best-score">0</span> · <span id="start-best-distance">0</span>m
+          </div>
+          <button class="btn btn-primary" id="btn-start">GAME START</button>
+        </div>
+        <div class="cyber-grid" aria-hidden="true"></div>
+      </section>
+
+      <!-- ② 캐릭터 선택 -->
+      <section id="screen-select" class="screen">
+        <div class="screen-inner">
+          <h2 class="title-sub">SELECT YOUR AI</h2>
+          <p class="desc">어떤 친구와 달릴까요?</p>
+          <div class="char-grid">
+            <button class="char-card selected" data-char="bbiya" id="char-bbiya">
+              <div class="char-preview">
+                <img src="assets/characters/bbiya/front.png" alt="삐야" />
+              </div>
+              <span class="char-name">🐥 삐야</span>
+              <span class="char-badge">SELECTED</span>
+            </button>
+            <button class="char-card" data-char="oru" id="char-oru">
+              <div class="char-preview">
+                <img src="assets/characters/oru/front.png" alt="오르" />
+              </div>
+              <span class="char-name">🐻 오르</span>
+              <span class="char-badge">SELECTED</span>
+            </button>
+          </div>
+          <button class="btn btn-primary" id="btn-play">▶ START</button>
+          <button class="btn btn-ghost" id="btn-back-start">← 돌아가기</button>
+        </div>
+      </section>
+
+      <!-- ③ 게임 화면 -->
+      <section id="screen-game" class="screen">
+        <div class="hud">
+          <div class="hud-lives" id="hud-lives"></div>
+          <div class="hud-stats">
+            <span class="hud-score">SCORE <strong id="hud-score">00000</strong></span>
+            <span class="hud-distance">DIST <strong id="hud-distance">0</strong>m</span>
+          </div>
+        </div>
+        <canvas id="game-canvas"></canvas>
+        <div class="touch-zones" id="touch-zones">
+          <button class="touch-zone" data-dir="left" aria-label="왼쪽"></button>
+          <button class="touch-zone" data-dir="center" aria-label="가운데"></button>
+          <button class="touch-zone" data-dir="right" aria-label="오른쪽"></button>
+        </div>
+        <button class="btn-pause" id="btn-pause" aria-label="일시정지">⏸</button>
+      </section>
+
+      <!-- ④ PAUSE -->
+      <section id="screen-pause" class="screen overlay">
+        <div class="screen-inner">
+          <h2 class="title-sub">PAUSED</h2>
+          <button class="btn btn-primary" id="btn-resume">계속하기</button>
+          <button class="btn btn-ghost" id="btn-restart-pause">다시 시작</button>
+          <button class="btn btn-ghost" id="btn-main-pause">메인으로</button>
+        </div>
+      </section>
+
+      <!-- ⑤ GAME OVER -->
+      <section id="screen-over" class="screen overlay">
+        <div class="screen-inner">
+          <h2 class="title-sub game-over-title">GAME OVER</h2>
+          <div class="over-char" id="over-char-img"></div>
+          <div class="over-stats">
+            <div class="stat-row">
+              <span>SCORE</span>
+              <strong id="over-score">0</strong>
+            </div>
+            <div class="stat-row">
+              <span>DISTANCE</span>
+              <strong id="over-distance">0m</strong>
+            </div>
+            <div class="stat-row best">
+              <span>BEST</span>
+              <strong id="over-best">0</strong>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="btn-retry">다시 플레이</button>
+          <button class="btn btn-ghost" id="btn-main-over">메인으로</button>
+        </div>
+      </section>
+
+      <!-- 피드백 토스트 -->
+      <div id="toast" class="toast" aria-live="polite"></div>
+    </div>
+
+    <script src="game.js"></script>
+  </body>
+</html>
