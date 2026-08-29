@@ -242,6 +242,14 @@ body {
   font-weight: 600;
 }
 
+.char-meta {
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  text-align: center;
+  line-height: 1.4;
+}
+
 /* ── Game screen ── */
 #screen-game {
   justify-content: flex-start;
@@ -321,7 +329,7 @@ body {
   cursor: pointer;
 }
 
-.btn-pause {
+.btn-gear {
   position: absolute;
   top: 3.5rem;
   right: 0.75rem;
@@ -331,12 +339,16 @@ body {
   border: 1px solid var(--border);
   background: rgba(5, 8, 24, 0.7);
   color: var(--text);
-  font-size: 0.9rem;
   cursor: pointer;
   z-index: 6;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.btn-gear:hover {
+  color: var(--neon);
+  border-color: var(--neon);
 }
 
 /* ── Game Over ── */
@@ -435,4 +447,161 @@ body {
 
 .shake {
   animation: shake 0.35s ease;
+}
+
+/* ── Main tabs ── */
+#screen-start {
+  justify-content: flex-start;
+}
+
+.main-tabs {
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  z-index: 3;
+  border-bottom: 1px solid var(--border);
+  background: rgba(5, 8, 24, 0.55);
+}
+
+.main-tab {
+  flex: 1;
+  padding: 0.9rem 0.5rem;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.main-tab.active {
+  color: var(--neon);
+  box-shadow: inset 0 -2px 0 var(--neon);
+}
+
+#screen-start .tab-panel {
+  display: none;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+}
+
+#screen-start .tab-panel.active {
+  display: flex;
+}
+
+#panel-settings {
+  overflow-y: auto;
+}
+
+/* ── Settings ── */
+.settings-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.settings-overlay-inner {
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.settings-group {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.settings-heading {
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--neon);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.settings-hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.settings-toggle {
+  appearance: none;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(122, 143, 170, 0.35);
+  border: 1px solid var(--border);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.settings-toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e8f4ff;
+  transition: transform 0.15s ease;
+}
+
+.settings-toggle:checked {
+  background: linear-gradient(135deg, var(--neon) 0%, var(--neon2) 100%);
+}
+
+.settings-toggle:checked::after {
+  transform: translateX(18px);
+}
+
+.settings-range {
+  width: 130px;
+  accent-color: var(--neon);
+  cursor: pointer;
+}
+
+.key-bind {
+  min-width: 72px;
+  padding: 0.35rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--neon);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.key-bind.listening {
+  border-color: var(--neon3);
+  color: var(--neon3);
+  box-shadow: 0 0 12px rgba(255, 61, 154, 0.35);
+}
+
+.btn-compact {
+  min-width: 0;
+  align-self: flex-start;
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
 }

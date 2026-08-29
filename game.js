@@ -8,13 +8,23 @@
 
   // ── Constants ──────────────────────────────────────────────
   const LANES = 3;
-  const MAX_LIVES = 5;
   const BASE_SPEED = 3.5;
   const SCORE_PER_SEC = 10;
   const DODGE_BONUS = 50;
   const VACCINE_BONUS = 100;
   const INVINCIBLE_MS = 1800;
   const LANE_LERP = 0.18;
+  const ITEM_PICK_RADIUS = 44;
+  const SETTINGS_KEY = "aiRun_settings";
+  const DEFAULT_SETTINGS = {
+    bgmOn: true,
+    sfxOn: true,
+    bgmVolume: 0.7,
+    sfxVolume: 0.8,
+    keys: { left: "ArrowLeft", right: "ArrowRight", pause: "Escape" },
+  };
+  const BGM_BASE = { lobby: 0.32, game: 0.38 };
+  const SFX_BASE = { heal: 0.72, hit: 0.78, data: 0.58 };
 
   const SPEED_TIERS = [
     { until: 20, mult: 1.0 },
@@ -28,12 +38,26 @@
       name: "삐야",
       emoji: "🐥",
       base: "assets/characters/bbiya",
+      maxLives: 3,
+      hitRadius: 26,
+      drawScale: 0.18,
+      drawMax: 76,
     },
     oru: {
       name: "오르",
       emoji: "🐻",
       base: "assets/characters/oru",
+      maxLives: 5,
+      hitRadius: 48,
+      drawScale: 0.26,
+      drawMax: 108,
     },
+  };
+
+  const ITEM_ASSETS = {
+    virus: "assets/items/virus.png",
+    vaccine: "assets/items/vaccine.png",
+    heal: "assets/items/heal.png",
   };
 
   const ANIM = {
@@ -63,7 +87,7 @@
     start: document.getElementById("screen-start"),
     select: document.getElementById("screen-select"),
     game: document.getElementById("screen-game"),
-    pause: document.getElementById("screen-pause"),
+    settings: document.getElementById("screen-settings"),
     over: document.getElementById("screen-over"),
   };
 
@@ -88,7 +112,7 @@
     lane: 1,
     laneX: 0,
     targetLaneX: 0,
-    lives: MAX_LIVES,
+    lives: CHARS.bbiya.maxLives,
     score: 0,
     distance: 0,
     elapsed: 0,
@@ -110,7 +134,9 @@
   };
 
   // ── Screen navigation ──────────────────────────────────────
-  const OVERLAY_SCREENS = new Set(["pause", "over"]);
+  const OVERLAY_SCREENS = new Set(["settings", "over"]);
+  let settings = loadSettings();
+  let pendingBind = null;
 
   function showScreen(name) {
     if (OVERLAY_SCREENS.has(name)) {
@@ -131,6 +157,41 @@
   }
 
   // ── Audio (Mixkit — assets/sounds/ATTRIBUTION.md) ───────────
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+      const parsed = JSON.parse(raw);
+      return {
+        bgmOn: parsed.bgmOn !== false,
+        sfxOn: parsed.sfxOn !== false,
+        bgmVolume: clamp01(parsed.bgmVolume, DEFAULT_SETTINGS.bgmVolume),
+        sfxVolume: clamp01(parsed.sfxVolume, DEFAULT_SETTINGS.sfxVolume),
+        keys: {
+          left: parsed.keys && parsed.keys.left ? parsed.keys.left : DEFAULT_SETTINGS.keys.left,
+          right: parsed.keys && parsed.keys.right ? parsed.keys.right : DEFAULT_SETTINGS.keys.right,
+          pause: parsed.keys && parsed.keys.pause ? parsed.keys.pause : DEFAULT_SETTINGS.keys.pause,
+        },
+      };
+    } catch (err) {
+      return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+    }
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (err) {
+      /* Safari file:// 또는 시크릿 모드 */
+    }
+  }
+
+  function clamp01(value, fallback) {
+    const n = Number(value);
+    if (!isFinite(n)) return fallback;
+    return Math.max(0, Math.min(1, n));
+  }
+
   function makeAudio(src, opts) {
     const el = new Audio(src);
     el.loop = !!(opts && opts.loop);
@@ -140,11 +201,27 @@
   }
 
   function initAudio() {
-    audioState.lobby = makeAudio(SOUNDS.lobby, { loop: true, volume: 0.32 });
-    audioState.game = makeAudio(SOUNDS.game, { loop: true, volume: 0.38 });
-    audioState.sfx.heal = makeAudio(SOUNDS.heal, { volume: 0.72 });
-    audioState.sfx.hit = makeAudio(SOUNDS.hit, { volume: 0.78 });
-    audioState.sfx.data = makeAudio(SOUNDS.data, { volume: 0.58 });
+    audioState.lobby = makeAudio(SOUNDS.lobby, { loop: true, volume: BGM_BASE.lobby });
+    audioState.game = makeAudio(SOUNDS.game, { loop: true, volume: BGM_BASE.game });
+    audioState.sfx.heal = makeAudio(SOUNDS.heal, { volume: SFX_BASE.heal });
+    audioState.sfx.hit = makeAudio(SOUNDS.hit, { volume: SFX_BASE.hit });
+    audioState.sfx.data = makeAudio(SOUNDS.data, { volume: SFX_BASE.data });
+    applyAudioSettings();
+  }
+
+  function applyAudioSettings() {
+    const bgmMul = settings.bgmOn ? settings.bgmVolume : 0;
+    const sfxMul = settings.sfxOn ? settings.sfxVolume : 0;
+    if (audioState.lobby) audioState.lobby.volume = BGM_BASE.lobby * bgmMul;
+    if (audioState.game) audioState.game.volume = BGM_BASE.game * bgmMul;
+    Object.keys(SFX_BASE).forEach(function (name) {
+      if (audioState.sfx[name]) audioState.sfx[name].volume = SFX_BASE[name] * sfxMul;
+    });
+    if (!settings.bgmOn) {
+      pauseBgm();
+      return;
+    }
+    if (audioState.unlocked) syncBgm();
   }
 
   function unlockAudio() {
@@ -178,9 +255,15 @@
     if (!audioState.unlocked) return;
     const next = kind === "game" ? audioState.game : audioState.lobby;
     if (!next) return;
-    if (audioState.activeBgm === next && !next.paused) return;
-    stopAllBgm();
-    audioState.activeBgm = next;
+    if (audioState.activeBgm !== next) {
+      stopAllBgm();
+      audioState.activeBgm = next;
+    }
+    if (!settings.bgmOn) {
+      if (!next.paused) next.pause();
+      return;
+    }
+    if (!next.paused) return;
     next.play().catch(function () {});
   }
 
@@ -191,7 +274,7 @@
   }
 
   function resumeBgm() {
-    if (!audioState.unlocked || !audioState.activeBgm) return;
+    if (!audioState.unlocked || !settings.bgmOn || !audioState.activeBgm) return;
     if (audioState.activeBgm.paused) {
       audioState.activeBgm.play().catch(function () {});
     }
@@ -212,12 +295,108 @@
   }
 
   function playSfx(name) {
-    if (!audioState.unlocked) return;
+    if (!audioState.unlocked || !settings.sfxOn) return;
     const base = audioState.sfx[name];
     if (!base) return;
     const clip = base.cloneNode();
     clip.volume = base.volume;
     clip.play().catch(function () {});
+  }
+
+  function keyLabel(key) {
+    const map = {
+      ArrowLeft: "←",
+      ArrowRight: "→",
+      ArrowUp: "↑",
+      ArrowDown: "↓",
+      Escape: "Esc",
+      " ": "Space",
+      Enter: "Enter",
+      Tab: "Tab",
+    };
+    if (map[key]) return map[key];
+    if (key && key.length === 1) return key.toUpperCase();
+    return key || "?";
+  }
+
+  function matchesKey(pressed, bound) {
+    if (!pressed || !bound) return false;
+    if (pressed === bound) return true;
+    return pressed.toLowerCase() === bound.toLowerCase();
+  }
+
+  function actionFromKey(key) {
+    if (matchesKey(key, settings.keys.left)) return "left";
+    if (matchesKey(key, settings.keys.right)) return "right";
+    if (matchesKey(key, settings.keys.pause)) return "pause";
+    if (settings.keys.left === "ArrowLeft" && matchesKey(key, "a")) return "left";
+    if (settings.keys.right === "ArrowRight" && matchesKey(key, "d")) return "right";
+    return null;
+  }
+
+  function maxLives() {
+    return CHARS[selectedChar].maxLives;
+  }
+
+  function mountSettings(mode) {
+    const panel = document.getElementById("settings-panel");
+    const target = mode === "game"
+      ? document.getElementById("settings-mount-game")
+      : document.getElementById("panel-settings");
+    if (!panel || !target) return;
+    target.appendChild(panel);
+    panel.hidden = false;
+    syncSettingsUI();
+  }
+
+  function syncSettingsUI() {
+    const bgmOn = document.getElementById("set-bgm-on");
+    const sfxOn = document.getElementById("set-sfx-on");
+    const bgmVol = document.getElementById("set-bgm-vol");
+    const sfxVol = document.getElementById("set-sfx-vol");
+    if (bgmOn) bgmOn.checked = settings.bgmOn;
+    if (sfxOn) sfxOn.checked = settings.sfxOn;
+    if (bgmVol) bgmVol.value = String(Math.round(settings.bgmVolume * 100));
+    if (sfxVol) sfxVol.value = String(Math.round(settings.sfxVolume * 100));
+    document.querySelectorAll(".key-bind").forEach(function (btn) {
+      const action = btn.dataset.action;
+      btn.classList.toggle("listening", pendingBind === action);
+      btn.textContent = pendingBind === action ? "키 입력…" : keyLabel(settings.keys[action]);
+    });
+  }
+
+  function showMainTab(name) {
+    const homeTab = document.getElementById("tab-home");
+    const settingsTab = document.getElementById("tab-settings");
+    const homePanel = document.getElementById("panel-home");
+    const settingsPanel = document.getElementById("panel-settings");
+    const isSettings = name === "settings";
+    homeTab.classList.toggle("active", !isSettings);
+    settingsTab.classList.toggle("active", isSettings);
+    homeTab.setAttribute("aria-selected", String(!isSettings));
+    settingsTab.setAttribute("aria-selected", String(isSettings));
+    homePanel.classList.toggle("active", !isSettings);
+    settingsPanel.classList.toggle("active", isSettings);
+    homePanel.hidden = isSettings;
+    settingsPanel.hidden = !isSettings;
+    if (isSettings) mountSettings("menu");
+  }
+
+  function openGameSettings() {
+    if (gameState !== "playing") return;
+    gameState = "paused";
+    cancelAnimationFrame(rafId);
+    pauseBgm();
+    pendingBind = null;
+    mountSettings("game");
+    showScreen("settings");
+  }
+
+  function closeGameSettings() {
+    hideOverlay("settings");
+    pendingBind = null;
+    mountSettings("menu");
+    syncSettingsUI();
   }
 
   function loadBest() {
@@ -281,6 +460,11 @@
     totalImages = 0;
     imagesLoaded = 0;
 
+    sprites.items = {};
+    Object.keys(ITEM_ASSETS).forEach(function () {
+      totalImages += 1;
+    });
+
     Object.keys(CHARS).forEach(function (key) {
       const paths = spritePaths(key);
       sprites[key] = { front: null, run: [], hit: [], happy: [] };
@@ -291,6 +475,10 @@
       imagesLoaded++;
       if (imagesLoaded >= totalImages) initCodeLines();
     }
+
+    Object.keys(ITEM_ASSETS).forEach(function (key) {
+      sprites.items[key] = loadOne(ITEM_ASSETS[key], onImageLoaded);
+    });
 
     Object.keys(CHARS).forEach(function (key) {
       const paths = spritePaths(key);
@@ -354,7 +542,7 @@
   // ── Game init / reset ──────────────────────────────────────
   function resetGame() {
     game.lane = 1;
-    game.lives = MAX_LIVES;
+    game.lives = maxLives();
     game.score = 0;
     game.distance = 0;
     game.elapsed = 0;
@@ -393,17 +581,9 @@
     });
   }
 
-  function pauseGame() {
-    if (gameState !== "playing") return;
-    gameState = "paused";
-    cancelAnimationFrame(rafId);
-    pauseBgm();
-    showScreen("pause");
-  }
-
   function resumeGame() {
     gameState = "playing";
-    hideOverlay("pause");
+    closeGameSettings();
     resumeBgm();
     lastTime = performance.now();
     rafId = requestAnimationFrame(loop);
@@ -436,11 +616,45 @@
   }
 
   function onKeyDown(e) {
-    if (gameState === "playing") {
-      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") moveLane("left");
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") moveLane("right");
-      if (e.key === "Escape") pauseGame();
+    if (pendingBind) {
+      e.preventDefault();
+      bindKey(pendingBind, e.key);
+      return;
     }
+    const action = actionFromKey(e.key);
+    if (action === "pause") {
+      if (gameState === "playing") {
+        openGameSettings();
+      } else if (gameState === "paused" && screens.settings.classList.contains("active")) {
+        resumeGame();
+      }
+      return;
+    }
+    if (gameState === "playing") {
+      if (action === "left") moveLane("left");
+      if (action === "right") moveLane("right");
+    }
+  }
+
+  function bindKey(action, key) {
+    if (key === "Shift" || key === "Control" || key === "Alt" || key === "Meta") {
+      pendingBind = null;
+      syncSettingsUI();
+      return;
+    }
+    const used = Object.keys(settings.keys).some(function (other) {
+      return other !== action && matchesKey(key, settings.keys[other]);
+    });
+    if (used) {
+      showToast("이미 다른 동작에 쓰인 키입니다");
+      pendingBind = null;
+      syncSettingsUI();
+      return;
+    }
+    settings.keys[action] = key;
+    pendingBind = null;
+    saveSettings();
+    syncSettingsUI();
   }
 
   // ── Spawning ───────────────────────────────────────────────
@@ -487,28 +701,29 @@
       game.itemTimer = 1.2;
       return;
     }
-    game.items.push({ lane: lane, y: SPAWN_Y, type: "vaccine", collected: false });
+    const type = Math.random() < 0.55 ? "vaccine" : "heal";
+    game.items.push({ lane: lane, y: SPAWN_Y, type: type, collected: false });
   }
 
   // ── Collision ──────────────────────────────────────────────
   const PLAYER_Y_RATIO = 0.78;
-  const HIT_RADIUS = 38;
 
   function checkCollisions(now) {
     const px = game.laneX;
     const py = canvas.clientHeight * PLAYER_Y_RATIO;
+    const hitRadius = CHARS[selectedChar].hitRadius;
 
-    if (now < game.invincibleUntil) return;
-
-    for (const obs of game.obstacles) {
-      if (obs.hit) continue;
-      const ox = lanePositions[obs.lane];
-      const oy = obs.y;
-      const dist = Math.hypot(px - ox, py - oy);
-      if (dist < HIT_RADIUS) {
-        obs.hit = true;
-        onHit(now);
-        return;
+    if (now >= game.invincibleUntil) {
+      for (const obs of game.obstacles) {
+        if (obs.hit) continue;
+        const ox = lanePositions[obs.lane];
+        const oy = obs.y;
+        const dist = Math.hypot(px - ox, py - oy);
+        if (dist < hitRadius) {
+          obs.hit = true;
+          onHit(now);
+          return;
+        }
       }
     }
 
@@ -517,9 +732,9 @@
       const ix = lanePositions[item.lane];
       const iy = item.y;
       const dist = Math.hypot(px - ix, py - iy);
-      if (dist < HIT_RADIUS) {
+      if (dist < ITEM_PICK_RADIUS) {
         item.collected = true;
-        onVaccine(now);
+        onHeal(now, item.type);
       }
     }
   }
@@ -539,11 +754,13 @@
     }
   }
 
-  function onVaccine(now) {
+  function onHeal(now, type) {
     playSfx("heal");
-    if (game.lives < MAX_LIVES) {
+    if (game.lives < maxLives()) {
       game.lives++;
-      showToast("✨ +1 LIFE");
+      showToast(type === "heal" ? "❤️ +1 LIFE" : "✨ +1 LIFE");
+    } else {
+      showToast(type === "heal" ? "❤️ MAX" : "✨ MAX");
     }
     game.score += VACCINE_BONUS;
     game.happyUntil = now + 800;
@@ -552,8 +769,12 @@
 
   // ── HUD ────────────────────────────────────────────────────
   function updateHUD() {
-    hudLives.textContent = "❤️".repeat(Math.max(0, game.lives)) + (game.lives === 0 ? "" : "");
-    if (game.lives === 0) hudLives.textContent = "💀";
+    if (game.lives === 0) {
+      hudLives.textContent = "💀";
+    } else {
+      const empty = Math.max(0, maxLives() - game.lives);
+      hudLives.textContent = "❤️".repeat(game.lives) + "🤍".repeat(empty);
+    }
     hudScore.textContent = String(Math.floor(game.score)).padStart(5, "0");
     hudDistance.textContent = Math.floor(game.distance);
   }
@@ -664,37 +885,39 @@
     return set.run[idx] || set.front;
   }
 
+  function drawItemSprite(img, x, y, size, fallback, glow) {
+    const ready = img && img.complete && img.naturalWidth;
+    ctx.save();
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = 14;
+    if (ready) {
+      ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+    } else {
+      ctx.font = size * 0.85 + "px serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(fallback, x, y);
+    }
+    ctx.restore();
+  }
+
   function drawVirus(x, y, size) {
-    ctx.font = `${size}px serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    ctx.shadowColor = "rgba(255, 60, 100, 0.6)";
-    ctx.shadowBlur = 12;
-    ctx.fillText("🦠", x, y);
-    ctx.shadowBlur = 0;
-
-    ctx.strokeStyle = "rgba(255, 60, 100, 0.3)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(x, y, size * 0.55, 0, Math.PI * 2);
-    ctx.stroke();
+    drawItemSprite(sprites.items && sprites.items.virus, x, y, size, "🦠", "rgba(255, 60, 160, 0.55)");
   }
 
   function drawVaccine(x, y, size) {
-    ctx.font = `${size}px serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.shadowColor = "rgba(0, 255, 170, 0.6)";
-    ctx.shadowBlur = 14;
-    ctx.fillText("💉", x, y);
-    ctx.shadowBlur = 0;
+    drawItemSprite(sprites.items && sprites.items.vaccine, x, y, size, "💉", "rgba(0, 220, 255, 0.55)");
+  }
+
+  function drawHeal(x, y, size) {
+    drawItemSprite(sprites.items && sprites.items.heal, x, y, size, "❤️", "rgba(0, 255, 160, 0.5)");
   }
 
   function drawPlayer(w, h, now) {
     const px = game.laneX;
     const py = h * PLAYER_Y_RATIO;
-    const size = Math.min(w * 0.22, 90);
+    const def = CHARS[selectedChar];
+    const size = Math.min(w * def.drawScale, def.drawMax);
 
     if (now >= game.hitAnimUntil && now < game.invincibleUntil) {
       game.blinkPhase += 0.15;
@@ -781,11 +1004,13 @@
     drawBackground(w, h, dt);
 
     game.obstacles.forEach((obs) => {
-      if (!obs.hit) drawVirus(lanePositions[obs.lane], obs.y, 36);
+      if (!obs.hit) drawVirus(lanePositions[obs.lane], obs.y, 48);
     });
 
     game.items.forEach((item) => {
-      if (!item.collected) drawVaccine(lanePositions[item.lane], item.y, 32);
+      if (item.collected) return;
+      if (item.type === "heal") drawHeal(lanePositions[item.lane], item.y, 42);
+      else drawVaccine(lanePositions[item.lane], item.y, 42);
     });
 
     drawPlayer(w, h, now);
@@ -795,6 +1020,15 @@
   }
 
   // ── Event listeners ────────────────────────────────────────
+  document.getElementById("tab-home").addEventListener("click", function () {
+    showMainTab("home");
+  });
+  document.getElementById("tab-settings").addEventListener("click", function () {
+    unlockAudio();
+    showMainTab("settings");
+    syncBgm();
+  });
+
   document.getElementById("btn-start").addEventListener("click", function () {
     unlockAudio();
     showScreen("select");
@@ -802,6 +1036,7 @@
   });
   document.getElementById("btn-back-start").addEventListener("click", function () {
     showScreen("start");
+    showMainTab("home");
     syncBgm();
   });
 
@@ -817,26 +1052,63 @@
     unlockAudio();
     startGame();
   });
-  document.getElementById("btn-pause").addEventListener("click", pauseGame);
-  document.getElementById("btn-resume").addEventListener("click", resumeGame);
-  document.getElementById("btn-restart-pause").addEventListener("click", () => {
-    hideOverlay("pause");
+  document.getElementById("btn-gear").addEventListener("click", openGameSettings);
+  document.getElementById("btn-settings-resume").addEventListener("click", resumeGame);
+  document.getElementById("btn-restart-settings").addEventListener("click", function () {
+    closeGameSettings();
     startGame();
   });
-  document.getElementById("btn-main-pause").addEventListener("click", function () {
+  document.getElementById("btn-main-settings").addEventListener("click", function () {
     gameState = "idle";
     cancelAnimationFrame(rafId);
-    hideOverlay("pause");
+    closeGameSettings();
     showScreen("start");
+    showMainTab("home");
     syncBgm();
   });
   document.getElementById("btn-retry").addEventListener("click", function () {
+    hideOverlay("over");
     showScreen("select");
     syncBgm();
   });
   document.getElementById("btn-main-over").addEventListener("click", function () {
+    hideOverlay("over");
     showScreen("start");
+    showMainTab("home");
     syncBgm();
+  });
+
+  document.getElementById("set-bgm-on").addEventListener("change", function (e) {
+    settings.bgmOn = e.target.checked;
+    saveSettings();
+    applyAudioSettings();
+  });
+  document.getElementById("set-sfx-on").addEventListener("change", function (e) {
+    settings.sfxOn = e.target.checked;
+    saveSettings();
+    applyAudioSettings();
+  });
+  document.getElementById("set-bgm-vol").addEventListener("input", function (e) {
+    settings.bgmVolume = Number(e.target.value) / 100;
+    saveSettings();
+    applyAudioSettings();
+  });
+  document.getElementById("set-sfx-vol").addEventListener("input", function (e) {
+    settings.sfxVolume = Number(e.target.value) / 100;
+    saveSettings();
+    applyAudioSettings();
+  });
+  document.querySelectorAll(".key-bind").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      pendingBind = pendingBind === btn.dataset.action ? null : btn.dataset.action;
+      syncSettingsUI();
+    });
+  });
+  document.getElementById("btn-reset-keys").addEventListener("click", function () {
+    settings.keys = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.keys));
+    pendingBind = null;
+    saveSettings();
+    syncSettingsUI();
   });
 
   document.getElementById("touch-zones").addEventListener("click", (e) => {
@@ -862,6 +1134,8 @@
     initCodeLines();
     updateStartBest();
     calcLanePositions();
+    mountSettings("menu");
+    showMainTab("home");
   }
 
   if (document.readyState === "loading") {
