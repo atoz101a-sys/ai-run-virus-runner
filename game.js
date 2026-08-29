@@ -39,7 +39,8 @@
       emoji: "🐥",
       base: "assets/characters/bbiya",
       maxLives: 3,
-      hitRadius: 26,
+      hitHalfW: 22,
+      hitHalfH: 20,
       drawScale: 0.18,
       drawMax: 76,
     },
@@ -48,9 +49,10 @@
       emoji: "🐻",
       base: "assets/characters/oru",
       maxLives: 5,
-      hitRadius: 48,
-      drawScale: 0.26,
-      drawMax: 108,
+      hitHalfW: 24,
+      hitHalfH: 46,
+      drawScale: 0.32,
+      drawMax: 128,
     },
   };
 
@@ -708,18 +710,21 @@
   // ── Collision ──────────────────────────────────────────────
   const PLAYER_Y_RATIO = 0.78;
 
+  function hitsHitbox(px, py, ox, oy, halfW, halfH) {
+    return Math.abs(px - ox) < halfW && Math.abs(py - oy) < halfH;
+  }
+
   function checkCollisions(now) {
     const px = game.laneX;
     const py = canvas.clientHeight * PLAYER_Y_RATIO;
-    const hitRadius = CHARS[selectedChar].hitRadius;
+    const def = CHARS[selectedChar];
 
     if (now >= game.invincibleUntil) {
       for (const obs of game.obstacles) {
         if (obs.hit) continue;
         const ox = lanePositions[obs.lane];
         const oy = obs.y;
-        const dist = Math.hypot(px - ox, py - oy);
-        if (dist < hitRadius) {
+        if (hitsHitbox(px, py, ox, oy, def.hitHalfW, def.hitHalfH)) {
           obs.hit = true;
           onHit(now);
           return;
@@ -731,8 +736,7 @@
       if (item.collected) continue;
       const ix = lanePositions[item.lane];
       const iy = item.y;
-      const dist = Math.hypot(px - ix, py - iy);
-      if (dist < ITEM_PICK_RADIUS) {
+      if (hitsHitbox(px, py, ix, iy, ITEM_PICK_RADIUS * 0.55, ITEM_PICK_RADIUS * 0.75)) {
         item.collected = true;
         onHeal(now, item.type);
       }
