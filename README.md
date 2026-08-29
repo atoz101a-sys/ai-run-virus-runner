@@ -4,7 +4,13 @@
 
 ## 실행 방법
 
-### macOS (추천)
+### 온라인 (Vercel)
+
+**https://ai-run-virus-runner.vercel.app**
+
+브라우저에서 바로 플레이할 수 있습니다.
+
+### macOS (로컬)
 
 `게임실행.command` 더블클릭 → Safari에서 자동 실행
 
@@ -53,3 +59,13 @@ python3 scripts/slice_sprites.py
 ```
 
 필요 패키지: `pypng` (`pip install pypng`)
+
+## Vercel 배포
+
+GitHub 저장소가 Vercel에 연결되어 있어, `main` 브랜치에 push하면 자동으로 재배포됩니다.
+
+수동 배포:
+
+```bash
+npx vercel deploy --prod
+```
